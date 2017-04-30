@@ -64,17 +64,19 @@ class OutputGenerator:
         self.meta_data = meta_data
 
 
-    def read_one(self, path, cols, desired_cols):
+    def read_one(self, path, cols, desired_col):
         # reads a sample file
         df = pd.read_table(path, sep="\t|;", lineterminator="\n")
-        df = df.drop(df.columns[[-1]],axis=1) #the last column is null
-        df.columns = cols
-        df = df[desired_cols]
-        cc = [x for x in df.columns if x not in cols[:8]] #not to check the first 8 cols
-        for d in cc:
-            df[d] = df[d].apply(lambda x: x.split('"')[-2] if isinstance(x, str) and (x.find('"') != -1) else x) #if it is a string and contains "
+        df = df.drop(df.columns[[-1]],axis=1)  # the last column is null
+        df.columns = cols  # column names from schema
+        df = df.drop(df.columns[[1, 2, 5, 7]], axis=1)
+        df['region'] = df['seqname'].map(str) + ',' + df['start'].map(str) + '-' + df['end'].map(str) + ',' + df[
+            'strand'].map(str)
         sample = self.get_sample_name(path)
         df['sample'] = sample
+        desired_cols = ['sample', 'region', desired_col]
+        df = df[desired_cols]
+        df[desired_col] = df[desired_col].apply(lambda x: x.split('"')[-2] if isinstance(x, str) and (x.find('"') != -1) else x) #if it is a string and contains "
         return df
 
     def select_columns(self, desired_cols):
@@ -82,22 +84,22 @@ class OutputGenerator:
 
 
 
-    def read_all(self, path, schema_file,desired_cols):
+    def read_all(self, path, schema_file,desired_col):
         # reads all sample files
         files = self._get_files("gtf", path)
         df = pd.DataFrame()
         cols = self.parse_schema(schema_file)
         for f in files:
-            data = self.read_one(f, cols, desired_cols)
+            data = self.read_one(f, cols, desired_col)
             if data is not None:
                 df = pd.concat([data, df], axis=0)
         self.data = df
 
-    def to_matrix(self,value,index):
+    def to_matrix(self,value):
         # creates a matrix dataframe
         self.data[value] = self.data[value].map(int)
         self.data = pd.pivot_table(self.data,
-                                values=value, index=[index], columns=['sample'],
+                                values=value, index=['region'], columns=['sample'],
                                 fill_value=0)
 
     def remove_zeros(self):
